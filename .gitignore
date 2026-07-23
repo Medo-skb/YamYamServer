@@ -1,0 +1,63 @@
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+
+# Firebase / Google service account credentials
+*-firebase-adminsdk-*.json
+*serviceAccount*.json
+*service-account*.json
+firebase-adminsdk*.json
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache and build output
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test, type-checker, and linter caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+htmlcov/
+
+# Runtime output
+*.log
+logs/
+tmp/
+temp/
+uploads/
+
+# Firebase emulator and debug output
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# IDE settings
+.idea/
+.vscode/
+*.code-workspace
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
