@@ -127,6 +127,9 @@ def issue_dev_stamp(
         free_point_balance = _as_non_negative_int(
             user_data.get("freePointBalance")
         )
+        paid_point_balance = _as_non_negative_int(
+            user_data.get("paidPointBalance")
+        )
         next_free_point_balance = free_point_balance + reward_point
         next_rating_sum = rating_sum + rating
         next_rating_count = rating_count + 1
@@ -198,6 +201,8 @@ def issue_dev_stamp(
                     "source": "stamp",
                     "amount": reward_point,
                     "pointType": "free",
+                    "freePointBalanceAfter": next_free_point_balance,
+                    "paidPointBalanceAfter": paid_point_balance,
                     "refType": "stamp",
                     "refId": dev_id,
                     "createdAt": created_at,
@@ -497,6 +502,9 @@ def issue_stamp(
             current_user_data.get("freePointBalance")
         )
         next_free_point_balance = free_point_balance + reward_point
+        paid_point_balance = _as_non_negative_int(
+            current_user_data.get("paidPointBalance")
+        )
         created_at = firestore.SERVER_TIMESTAMP
 
         current_transaction.set(
@@ -554,6 +562,8 @@ def issue_stamp(
                     "source": "stamp",
                     "amount": reward_point,
                     "pointType": "free",
+                    "freePointBalanceAfter": next_free_point_balance,
+                    "paidPointBalanceAfter": paid_point_balance,
                     "refType": "stamp",
                     "refId": receipt_hash,
                     "createdAt": created_at,

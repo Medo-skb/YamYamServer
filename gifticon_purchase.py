@@ -40,10 +40,7 @@ def purchase_gifticon(user_id: str, gifticon_id: str) -> dict[str, Any]:
     user_ref = database.collection("users").document(user_id)
     gifticon_ref = database.collection("gifticon").document(gifticon_id)
     purchase_ref = user_ref.collection("users_purchase").document()
-    free_transaction_ref = user_ref.collection(
-        "users_point_transaction"
-    ).document()
-    paid_transaction_ref = user_ref.collection(
+    point_transaction_ref = user_ref.collection(
         "users_point_transaction"
     ).document()
 
@@ -159,25 +156,13 @@ def purchase_gifticon(user_id: str, gifticon_id: str) -> dict[str, Any]:
             {"stockCount": max(stock_count - 1, 0)},
         )
 
-        if point_usage["usedFreePoint"] > 0:
-            _write_point_transaction(
-                transaction=current_transaction,
-                transaction_ref=free_transaction_ref,
-                purchase_id=purchase_id,
-                amount=-point_usage["usedFreePoint"],
-                point_type="free",
-                created_at=created_at,
-            )
-
-        if point_usage["usedPaidPoint"] > 0:
-            _write_point_transaction(
-                transaction=current_transaction,
-                transaction_ref=paid_transaction_ref,
-                purchase_id=purchase_id,
-                amount=-point_usage["usedPaidPoint"],
-                point_type="paid",
-                created_at=created_at,
-            )
+        _write_point_transaction(
+            transaction=current_transaction,
+            transaction_ref=point_transaction_ref,
+            purchase_id=purchase_id,
+            point_usage=point_usage,
+            created_at=created_at,
+        )
 
         return {
             "purchaseId": purchase_id,
@@ -238,17 +223,29 @@ def _write_point_transaction(
     transaction,
     transaction_ref,
     purchase_id: str,
-    amount: int,
-    point_type: str,
+    point_usage: dict[str, int],
     created_at,
 ) -> None:
+    used_free_point = point_usage["usedFreePoint"]
+    used_paid_point = point_usage["usedPaidPoint"]
+    if used_free_point > 0 and used_paid_point > 0:
+        point_type = "mixed"
+    elif used_free_point > 0:
+        point_type = "free"
+    else:
+        point_type = "paid"
+
     transaction.set(
         transaction_ref,
         {
             "type": "use",
             "source": "purchase",
-            "amount": amount,
+            "amount": -(used_free_point + used_paid_point),
             "pointType": point_type,
+            "usedFreePoint": used_free_point,
+            "usedPaidPoint": used_paid_point,
+            "freePointBalanceAfter": point_usage["remainingFreePoint"],
+            "paidPointBalanceAfter": point_usage["remainingPaidPoint"],
             "refType": "purchase",
             "refId": purchase_id,
             "createdAt": created_at,

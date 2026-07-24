@@ -238,6 +238,8 @@ def complete_point_payment(
                 "source": "purchase",
                 "amount": point_amount,
                 "pointType": "paid",
+                "freePointBalanceAfter": free_point_balance,
+                "paidPointBalanceAfter": remaining_paid_point,
                 "refType": "purchase",
                 "refId": payment_id,
                 "createdAt": completed_at,
