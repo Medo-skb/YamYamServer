@@ -11,6 +11,7 @@ from fastapi import (
 )
 from firebase_admin import auth
 
+from badge_service import grant_earned_badges_safely
 from gifticon_purchase import (
     GifticonPurchaseError,
     ensure_firebase_app,
@@ -31,6 +32,40 @@ from stamp_verification import (
 )
 
 app = FastAPI()
+
+
+def attach_badge_grants(
+    *,
+    result: dict,
+    user_id: str,
+    road_id: str | None,
+    background_tasks: BackgroundTasks,
+) -> None:
+    badge_result = grant_earned_badges_safely(
+        user_id=user_id,
+        road_id=road_id,
+    )
+    new_badges = badge_result["newBadges"]
+    result["badgeGrantStatus"] = badge_result["status"]
+    result["newBadges"] = new_badges
+    if badge_result["failedConditions"]:
+        result["badgeGrantFailedConditions"] = badge_result[
+            "failedConditions"
+        ]
+
+    for badge in new_badges:
+        badge_id = badge["badgeId"]
+        badge_name = badge["name"]
+        background_tasks.add_task(
+            notify_user_safely,
+            user_id=user_id,
+            notification_type="badge",
+            title="새로운 뱃지 획득",
+            body=f"{badge_name} 뱃지를 획득했습니다.",
+            ref_type="badge",
+            ref_id=badge_id,
+            notification_id=f"badge_{badge_id}",
+        )
 
 
 def get_current_uid(
@@ -192,6 +227,12 @@ async def create_stamp_verification_endpoint(
             is_mock_location=isMockLocation,
             ip_address=request.client.host if request.client else None,
         )
+        attach_badge_grants(
+            result=result,
+            user_id=user_id,
+            road_id=roadId,
+            background_tasks=background_tasks,
+        )
         if not result.get("alreadyProcessed"):
             awarded_points = int(result.get("awardedPoints") or 0)
             point_message = (
@@ -233,6 +274,12 @@ def create_dev_stamp_endpoint(
             place_id=placeId,
             rating=rating,
             one_line_note=oneLineNote,
+        )
+        attach_badge_grants(
+            result=result,
+            user_id=user_id,
+            road_id=None,
+            background_tasks=background_tasks,
         )
         background_tasks.add_task(
             notify_user_safely,
