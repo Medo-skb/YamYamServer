@@ -73,6 +73,10 @@ def issue_dev_stamp(
     dev_id = f"dev_{uuid4().hex}"
     verification_ref = database.collection("verification").document(dev_id)
     stamp_ref = database.collection("stamp").document(dev_id)
+    point_transaction_ref = user_ref.collection(
+        "users_point_transaction"
+    ).document(f"stamp_{dev_id}")
+    reward_point = _non_negative_int_env("STAMP_REWARD_POINT", 0)
     transaction = database.transaction()
 
     @firestore.transactional
@@ -119,6 +123,11 @@ def issue_dev_stamp(
         rating_sum = _as_non_negative_int(place_data.get("ratingSum"))
         rating_count = _as_non_negative_int(place_data.get("ratingCount"))
         stamp_count = _as_non_negative_int(place_data.get("stampCount"))
+        user_data = current_user.to_dict() or {}
+        free_point_balance = _as_non_negative_int(
+            user_data.get("freePointBalance")
+        )
+        next_free_point_balance = free_point_balance + reward_point
         next_rating_sum = rating_sum + rating
         next_rating_count = rating_count + 1
         created_at = firestore.SERVER_TIMESTAMP
@@ -145,7 +154,7 @@ def issue_dev_stamp(
                 "receiptHash": dev_id,
                 "status": "approved",
                 "rejectReason": None,
-                "awardedPoints": 0,
+                "awardedPoints": reward_point,
                 "isDevBypass": True,
                 "createdAt": created_at,
             },
@@ -173,12 +182,34 @@ def issue_dev_stamp(
                 "stampCount": stamp_count + 1,
             },
         )
+        current_transaction.update(
+            user_ref,
+            {
+                "freePointBalance": next_free_point_balance,
+                "updatedAt": created_at,
+            },
+        )
+
+        if reward_point > 0:
+            current_transaction.set(
+                point_transaction_ref,
+                {
+                    "type": "earn",
+                    "source": "stamp",
+                    "amount": reward_point,
+                    "pointType": "free",
+                    "refType": "stamp",
+                    "refId": dev_id,
+                    "createdAt": created_at,
+                },
+            )
 
         return {
             "approved": True,
             "verificationId": dev_id,
             "stampId": dev_id,
-            "awardedPoints": 0,
+            "awardedPoints": reward_point,
+            "remainingFreePoint": next_free_point_balance,
             "alreadyProcessed": False,
             "isDevBypass": True,
         }

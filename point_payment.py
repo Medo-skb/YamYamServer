@@ -388,7 +388,9 @@ def _extract_payment_details(
     if not isinstance(method, dict):
         method = {}
 
-    payment_method_type = _as_optional_string(method.get("type"))
+    payment_method_type = _normalize_payment_method_type(
+        method.get("type")
+    )
     card_method = method
     easy_pay_provider = None
 
@@ -404,7 +406,7 @@ def _extract_payment_details(
     if easy_pay_provider:
         details["easyPayProvider"] = easy_pay_provider
 
-    if _as_optional_string(card_method.get("type")) == "CARD":
+    if _normalize_payment_method_type(card_method.get("type")) == "CARD":
         card = card_method.get("card")
         if not isinstance(card, dict):
             card = {}
@@ -443,6 +445,19 @@ def _parse_portone_timestamp(value: Any) -> datetime | None:
 
 def _is_masked_card_number(value: str) -> bool:
     return any(character in value for character in ("*", "X", "x"))
+
+
+def _normalize_payment_method_type(value: Any) -> str | None:
+    method_type = _as_optional_string(value)
+    if method_type is None:
+        return None
+
+    aliases = {
+        "PAYMENTMETHODCARD": "CARD",
+        "PAYMENTMETHODEASYPAY": "EASY_PAY",
+    }
+    normalized = method_type.replace("_", "").upper()
+    return aliases.get(normalized, method_type.upper())
 
 
 def _as_optional_string(value: Any) -> str | None:
