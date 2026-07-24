@@ -1,6 +1,6 @@
 # YamYamRoad FastAPI Server
 
-YamYamRoad Flutter 앱에서 사용하는 로컬 개발용 FastAPI 서버입니다.
+YamYamRoad Flutter 앱에서 사용하는 FastAPI 서버입니다.
 
 현재 다음 기능을 처리합니다.
 

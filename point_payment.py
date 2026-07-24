@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -151,6 +152,7 @@ def complete_point_payment(
         expected_amount=_as_positive_int(purchase_data.get("paidAmount")),
         expected_store_id=store_id,
     )
+    payment_details = _extract_payment_details(payment)
 
     point_transaction_ref = user_ref.collection(
         "users_point_transaction"
@@ -225,6 +227,7 @@ def complete_point_payment(
             {
                 "status": "paid",
                 "portoneTransactionId": payment.get("transactionId"),
+                **payment_details,
                 "completedAt": completed_at,
             },
         )
@@ -376,6 +379,77 @@ def _validate_portone_payment(
             message="결제 상점 정보가 일치하지 않습니다.",
             status_code=409,
         )
+
+
+def _extract_payment_details(
+    payment: dict[str, Any],
+) -> dict[str, Any]:
+    method = payment.get("method")
+    if not isinstance(method, dict):
+        method = {}
+
+    payment_method_type = _as_optional_string(method.get("type"))
+    card_method = method
+    easy_pay_provider = None
+
+    if payment_method_type == "EASY_PAY":
+        easy_pay_provider = _as_optional_string(method.get("provider"))
+        easy_pay_method = method.get("easyPayMethod")
+        if isinstance(easy_pay_method, dict):
+            card_method = easy_pay_method
+
+    details: dict[str, Any] = {}
+    if payment_method_type:
+        details["paymentMethodType"] = payment_method_type
+    if easy_pay_provider:
+        details["easyPayProvider"] = easy_pay_provider
+
+    if _as_optional_string(card_method.get("type")) == "CARD":
+        card = card_method.get("card")
+        if not isinstance(card, dict):
+            card = {}
+
+        card_issuer = _as_optional_string(card.get("issuer"))
+        masked_card_number = _as_optional_string(card.get("number"))
+        approval_number = _as_optional_string(
+            card_method.get("approvalNumber")
+        )
+
+        if card_issuer:
+            details["cardIssuer"] = card_issuer
+        if masked_card_number and _is_masked_card_number(
+            masked_card_number
+        ):
+            details["maskedCardNumber"] = masked_card_number
+        if approval_number:
+            details["approvalNumber"] = approval_number
+
+    paid_at = _parse_portone_timestamp(payment.get("paidAt"))
+    if paid_at is not None:
+        details["paidAt"] = paid_at
+
+    return details
+
+
+def _parse_portone_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    try:
+        return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _is_masked_card_number(value: str) -> bool:
+    return any(character in value for character in ("*", "X", "x"))
+
+
+def _as_optional_string(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
 
 
 def _build_completed_result(
