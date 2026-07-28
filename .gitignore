@@ -61,3 +61,6 @@ ui-debug.log
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Codex Agents file
+AGENTS.md

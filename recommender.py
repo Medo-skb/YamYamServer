@@ -1,165 +1,8 @@
-from math import radians, sin, cos, sqrt, atan2
-from datetime import datetime, timedelta
 from collections import Counter
 
-def build_place_message(place_results):
-    if len(place_results) == 0:
-        return {
-            "recommend": None,
-            "reasons": ["지금 추천할 만한 업체를 찾지 못했어요."]
-        }
-
-    top_place = place_results[0]
-    reasons = top_place["reasons"]
-
-    reason_texts = []
-
-    if any("현재 지역" in reason for reason in reasons):
-        reason_texts.append("지금 있는 지역과 가까워요.")
-
-    if any("자주 방문한 지역" in reason for reason in reasons):
-        reason_texts.append("평소 자주 가던 지역에 있어요.")
-
-    if any("선호 카테고리" in reason for reason in reasons):
-        reason_texts.append("선호하는 메뉴와 잘 맞아요.")
-
-    if any("유사 카테고리" in reason for reason in reasons):
-        reason_texts.append("이전에 좋아한 메뉴와 비슷한 계열이에요.")
-
-    if any("300m" in reason or "1km" in reason for reason in reasons):
-        reason_texts.append("거리도 부담이 적어요.")
-
-    if len(reason_texts) == 0:
-        reason_texts.append("전체 추천 점수가 가장 높아요.")
-
-    return {
-        "recommend": top_place["name"],
-        "reasons": reason_texts[:3],
-    }
-
-
-def build_course_message(course_results):
-    if len(course_results) == 0:
-        return {
-            "recommend": None,
-            "reasons": ["지금 추천할 만한 코스를 찾지 못했어요."]
-        }
-
-    top_course = course_results[0]
-    reasons = top_course["reasons"]
-
-    reason_texts = []
-
-    if any("현재 지역" in reason for reason in reasons):
-        reason_texts.append("현재 위치한 지역과 잘 맞는 코스예요.")
-
-    if any("자주 방문한 지역" in reason for reason in reasons):
-        reason_texts.append("평소 자주 가던 곳이라 동선이 익숙할 수 있어요.")
-
-    if any("선호 카테고리" in reason for reason in reasons):
-        reason_texts.append("선호하는 메뉴 구성이 포함돼 있어요.")
-
-    if any("코스 내 업체" in reason for reason in reasons):
-        reason_texts.append("가까운 위치에서 시작하기 좋아요.")
-
-    if len(reason_texts) == 0:
-        reason_texts.append("지금 가볍게 둘러보기 좋은 코스에요.")
-
-    return {
-        "recommend": top_course["title"],
-        "reasons": reason_texts[:3],
-    }
-
-
-def build_recommendation_message(place_results, course_results):
-    return {
-        "place": build_place_message(place_results),
-        "course": build_course_message(course_results),
-    }
-
-# =========================
-# 임시 데이터
-# 나중에 Firestore 조회 결과로 교체할 부분
-# =========================
-
-PLACES = [
-    {
-        "placeId": "place_001",
-        "name": "성수 베이커리",
-        "regionId": "region_seongsu",
-        "categoryIds": ["bakery"],
-        "lat": 37.5447,
-        "lng": 127.0557,
-        "isActive": True,
-    },
-    {
-        "placeId": "place_002",
-        "name": "성수 카페",
-        "regionId": "region_seongsu",
-        "categoryIds": ["cafe"],
-        "lat": 37.5452,
-        "lng": 127.0571,
-        "isActive": True,
-    },
-    {
-        "placeId": "place_003",
-        "name": "홍대 디저트",
-        "regionId": "region_hongdae",
-        "categoryIds": ["dessert"],
-        "lat": 37.5563,
-        "lng": 126.9220,
-        "isActive": True,
-    },
-    {
-        "placeId": "place_004",
-        "name": "강남 베이커리",
-        "regionId": "region_gangnam",
-        "categoryIds": ["bakery", "cafe"],
-        "lat": 37.4979,
-        "lng": 127.0276,
-        "isActive": True,
-    },
-]
-
-COURSES = [
-    {
-        "courseId": "course_001",
-        "title": "성수 디저트 코스",
-        "regionId": "region_seongsu",
-        "categoryIds": ["bakery", "cafe"],
-        "isActive": True,
-    },
-    {
-        "courseId": "course_002",
-        "title": "홍대 디저트 코스",
-        "regionId": "region_hongdae",
-        "categoryIds": ["dessert", "cafe"],
-        "isActive": True,
-    },
-]
-
-COURSE_PLACES = [
-    {"courseId": "course_001", "placeId": "place_001", "order": 1},
-    {"courseId": "course_001", "placeId": "place_002", "order": 2},
-    {"courseId": "course_002", "placeId": "place_003", "order": 1},
-]
-
-STAMPS = [
-    {
-        "stampId": "stamp_001",
-        "userId": "test_user_001",
-        "placeId": "place_001",
-        "courseId": "course_001",
-        "issuedAt": "2026-07-10",
-    },
-    {
-        "stampId": "stamp_002",
-        "userId": "test_user_001",
-        "placeId": "place_004",
-        "courseId": None,
-        "issuedAt": "2026-06-20",
-    },
-]
+from recommendation_messages import build_recommendation_message
+from recommendation_repository import load_recommendation_dataset
+from recommendation_utils import distance_meters, is_recent_date, rank_score
 
 # 유사 카테고리는 지금 DB에 없으니까 코드에서 임시 관리
 RELATED_CATEGORY_IDS = {
@@ -170,72 +13,12 @@ RELATED_CATEGORY_IDS = {
 
 
 # =========================
-# 공통 유틸
-# =========================
-
-def distance_meters(lat1, lng1, lat2, lng2):
-    earth_radius = 6371000
-
-    d_lat = radians(lat2 - lat1)
-    d_lng = radians(lng2 - lng1)
-
-    a = (
-        sin(d_lat / 2) ** 2
-        + cos(radians(lat1))
-        * cos(radians(lat2))
-        * sin(d_lng / 2) ** 2
-    )
-
-    c = 2 * atan2(sqrt(a), sqrt(1 - a))
-    return earth_radius * c
-
-
-def rank_score(value, ranked_values, scores):
-    if value not in ranked_values:
-        return 0
-
-    index = ranked_values.index(value)
-
-    if index >= len(scores):
-        return 0
-
-    return scores[index]
-
-
-def get_place(place_id):
-    for place in PLACES:
-        if place["placeId"] == place_id:
-            return place
-
-    return None
-
-
-def get_course_place_ids(course_id):
-    items = [
-        item for item in COURSE_PLACES
-        if item["courseId"] == course_id
-    ]
-
-    items.sort(key=lambda x: x["order"])
-    return [item["placeId"] for item in items]
-
-
-def is_recent_date(date_text, days=30):
-    try:
-        target_date = datetime.strptime(date_text, "%Y-%m-%d")
-    except ValueError:
-        return False
-
-    return target_date >= datetime.now() - timedelta(days=days)
-
-
-# =========================
 # 사용자 프로필 계산
 # =========================
 
-def build_user_profile(user_id):
+def build_user_profile(user_id, stamps, places_by_id):
     user_stamps = [
-        stamp for stamp in STAMPS
+        stamp for stamp in stamps
         if stamp["userId"] == user_id
     ]
 
@@ -246,7 +29,7 @@ def build_user_profile(user_id):
 
     for stamp in user_stamps:
         place_id = stamp["placeId"]
-        place = get_place(place_id)
+        place = places_by_id.get(place_id)
 
         if place is None:
             continue
@@ -356,6 +139,25 @@ def calculate_place_score(place, profile, current_region_id, user_lat, user_lng)
         score -= 3
         reasons.append("방문 이력 있음 -3")
 
+    popularity_score = 0
+    stamp_count = place.get("stampCount", 0)
+    rating_average = place.get("ratingAverage", 0)
+    if stamp_count >= 100:
+        popularity_score += 3
+    elif stamp_count >= 20:
+        popularity_score += 2
+    elif stamp_count >= 5:
+        popularity_score += 1
+
+    if rating_average >= 4.5:
+        popularity_score += 2
+    elif rating_average >= 4:
+        popularity_score += 1
+
+    if popularity_score > 0:
+        score += popularity_score
+        reasons.append(f"인기 지표 +{popularity_score}")
+
     return {
         "placeId": place["placeId"],
         "name": place["name"],
@@ -375,7 +177,7 @@ def calculate_course_score(course, profile, current_region_id, user_lat, user_ln
     if not course["isActive"]:
         return None
 
-    course_place_ids = get_course_place_ids(course["courseId"])
+    course_place_ids = course["placeIds"]
 
     if len(course_place_ids) == 0:
         return None
@@ -432,18 +234,13 @@ def calculate_course_score(course, profile, current_region_id, user_lat, user_ln
     if user_lat is not None and user_lng is not None:
         distances = []
 
-        for place_id in course_place_ids:
-            place = get_place(place_id)
-
-            if place is None:
-                continue
-
+        for coordinate in course["placeCoordinates"]:
             distances.append(
                 distance_meters(
                     user_lat,
                     user_lng,
-                    place["lat"],
-                    place["lng"],
+                    coordinate["lat"],
+                    coordinate["lng"],
                 )
             )
 
@@ -476,11 +273,22 @@ def recommend(
     userLat: float | None = None,
     userLng: float | None = None,
 ):
-    profile = build_user_profile(userId)
+    dataset = load_recommendation_dataset(
+        user_id=userId,
+        current_region_id=currentRegionId,
+    )
+    places = dataset["places"]
+    courses = dataset["courses"]
+    places_by_id = {place["placeId"]: place for place in places}
+    profile = build_user_profile(
+        userId,
+        dataset["stamps"],
+        places_by_id,
+    )
 
     place_results = []
 
-    for place in PLACES:
+    for place in places:
         result = calculate_place_score(
             place=place,
             profile=profile,
@@ -496,7 +304,7 @@ def recommend(
 
     course_results = []
 
-    for course in COURSES:
+    for course in courses:
         result = calculate_course_score(
             course=course,
             profile=profile,

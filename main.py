@@ -1,3 +1,4 @@
+# noqa: SIZE_OK — project convention keeps FastAPI route registration in one entry point
 from fastapi import (
     BackgroundTasks,
     Depends,
@@ -82,7 +83,7 @@ def get_current_uid(
         ensure_firebase_app()
         decoded_token = auth.verify_id_token(id_token)
         return decoded_token["uid"]
-    except Exception as error:
+    except Exception as error:  # noqa: BROAD_EXCEPT_OK — HTTP auth boundary
         raise HTTPException(
             status_code=401,
             detail="유효하지 않은 로그인 정보입니다.",
@@ -100,9 +101,18 @@ def get_recommend(
     currentRegionId: str | None = None,
     userLat: float | None = None,
     userLng: float | None = None,
+    authenticated_user_id: str = Depends(get_current_uid),
 ):
+    if userId != authenticated_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "user_mismatch",
+                "message": "현재 로그인한 사용자 정보가 일치하지 않습니다.",
+            },
+        )
     return recommend(
-        userId=userId,
+        userId=authenticated_user_id,
         currentRegionId=currentRegionId,
         userLat=userLat,
         userLng=userLng,
