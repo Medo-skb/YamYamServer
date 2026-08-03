@@ -193,6 +193,7 @@ GET  /recommend
 POST /point-payments/{pointPackageId}/prepare
 POST /point-payments/{paymentId}/complete
 POST /gifticons/{gifticonId}/purchase
+POST /notifications/community
 POST /stamp-verifications
 POST /dev/stamps/issue
 ```

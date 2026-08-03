@@ -1,6 +1,10 @@
 from collections import Counter
 
-from app.recommendation.messages import build_recommendation_message
+from app.recommendation.messages import (
+    build_course_recommendations,
+    build_place_recommendations,
+    build_recommendation_message,
+)
 from app.recommendation.repository import load_recommendation_dataset
 from app.recommendation.utils import distance_meters, is_recent_date, rank_score
 
@@ -329,6 +333,6 @@ def recommend(
         "userLat": userLat,
         "userLng": userLng,
         "message": messages,
-        "placeRecommendations": place_results[:5],
-        "courseRecommendations": course_results[:5],
+        "placeRecommendations": build_place_recommendations(place_results),
+        "courseRecommendations": build_course_recommendations(course_results),
     }

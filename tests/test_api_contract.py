@@ -8,6 +8,7 @@ EXPECTED_ROUTES = {
     ("GET", "/health"),
     ("GET", "/recommend"),
     ("POST", "/gifticons/{gifticon_id}/purchase"),
+    ("POST", "/notifications/community"),
     ("POST", "/point-payments/{point_package_id}/prepare"),
     ("POST", "/point-payments/{payment_id}/complete"),
     ("POST", "/stamp-verifications"),
