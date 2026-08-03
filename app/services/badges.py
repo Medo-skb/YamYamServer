@@ -5,7 +5,7 @@ from typing import Any, Iterable
 from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from gifticon_purchase import ensure_firebase_app
+from app.core.firebase import ensure_firebase_app
 
 
 logger = logging.getLogger(__name__)

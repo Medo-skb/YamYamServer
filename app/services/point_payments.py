@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from firebase_admin import firestore
 
-from gifticon_purchase import ensure_firebase_app
+from app.core.firebase import ensure_firebase_app
 
 
 class PointPaymentError(Exception):

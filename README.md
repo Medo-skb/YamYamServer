@@ -17,15 +17,21 @@ YamYamRoad Flutter 앱에서 사용하는 FastAPI 서버입니다.
 
 ```text
 YamYamRecommendServer
-├─ main.py                    FastAPI 엔드포인트
-├─ recommender.py             업체·로드 추천 점수 계산
-├─ point_payment.py           PortOne 결제 준비·검증·포인트 지급
-├─ gifticon_purchase.py       기프티콘 재고·구매 처리
-├─ stamp_verification.py      OCR·GPS 검증 및 스탬프 발행
-├─ badge_service.py           조건별 뱃지 검사·지급
-├─ notification_service.py    인앱 알림·FCM 발송
-├─ requirements.txt           Python 패키지 목록
-├─ run_server.bat             Windows 서버 실행 파일
+├─ main.py                    기존 uvicorn 실행 명령을 유지하는 진입점
+├─ app
+│  ├─ main.py                 FastAPI 생성 및 라우터 등록
+│  ├─ api
+│  │  ├─ dependencies.py      Firebase 인증 의존성
+│  │  ├─ badge_grants.py      스탬프 이후 뱃지·알림 연결
+│  │  └─ routers              기능별 HTTP 엔드포인트
+│  ├─ core
+│  │  └─ firebase.py          Firebase Admin 초기화
+│  ├─ recommendation          추천 데이터 조회·점수·메시지
+│  └─ services                결제·기프티콘·스탬프·뱃지·알림
+├─ tests                      공개 API 경로 회귀 테스트
+├─ requirements.txt           서버 실행 패키지 목록
+├─ requirements-dev.txt       테스트용 패키지 목록
+├─ run_server.bat             Windows 개발 서버 실행 파일
 ├─ .gitignore                 비밀키·가상환경 제외 설정
 └─ README.md
 ```
@@ -59,6 +65,13 @@ python -m venv .venv
 ```powershell
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+API 회귀 테스트까지 실행할 개발 환경은 테스트 패키지도 설치합니다.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
 ## 3. Firebase Admin SDK 설정

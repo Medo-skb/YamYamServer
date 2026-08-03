@@ -1,8 +1,8 @@
 from collections import Counter
 
-from recommendation_messages import build_recommendation_message
-from recommendation_repository import load_recommendation_dataset
-from recommendation_utils import distance_meters, is_recent_date, rank_score
+from app.recommendation.messages import build_recommendation_message
+from app.recommendation.repository import load_recommendation_dataset
+from app.recommendation.utils import distance_meters, is_recent_date, rank_score
 
 # 유사 카테고리는 지금 DB에 없으니까 코드에서 임시 관리
 RELATED_CATEGORY_IDS = {

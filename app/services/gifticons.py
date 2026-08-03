@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from typing import Any
 
-import firebase_admin
 from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1.document import DocumentSnapshot
+
+from app.core.firebase import ensure_firebase_app
 
 
 class GifticonPurchaseError(Exception):
@@ -18,13 +19,6 @@ class GifticonPurchaseError(Exception):
         self.code = code
         self.message = message
         self.status_code = status_code
-
-
-def ensure_firebase_app() -> None:
-    try:
-        firebase_admin.get_app()
-    except ValueError:
-        firebase_admin.initialize_app()
 
 
 def purchase_gifticon(user_id: str, gifticon_id: str) -> dict[str, Any]:

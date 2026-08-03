@@ -8,7 +8,7 @@ from typing import Any
 from uuid import uuid4
 from firebase_admin import firestore, storage
 
-from gifticon_purchase import ensure_firebase_app
+from app.core.firebase import ensure_firebase_app
 
 
 MAX_RECEIPT_BYTES = 10 * 1024 * 1024

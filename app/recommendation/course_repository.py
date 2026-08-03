@@ -6,7 +6,7 @@ from typing import Final
 
 from google.cloud.firestore_v1 import GeoPoint
 
-from recommendation_models import CourseCoordinate, CourseRecord
+from app.recommendation.models import CourseCoordinate, CourseRecord
 
 
 MAX_COURSES: Final = 300

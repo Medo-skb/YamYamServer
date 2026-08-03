@@ -6,7 +6,7 @@ from uuid import uuid4
 from firebase_admin import firestore, messaging
 from google.api_core.exceptions import AlreadyExists
 
-from gifticon_purchase import ensure_firebase_app
+from app.core.firebase import ensure_firebase_app
 
 
 logger = logging.getLogger(__name__)
