@@ -4,6 +4,7 @@ from typing import TypedDict
 class PlaceRecord(TypedDict):
     placeId: str
     name: str
+    address: str
     regionId: str
     categoryIds: list[str]
     lat: float

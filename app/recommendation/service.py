@@ -165,6 +165,7 @@ def calculate_place_score(place, profile, current_region_id, user_lat, user_lng)
     return {
         "placeId": place["placeId"],
         "name": place["name"],
+        "address": place["address"],
         "score": score,
         "reasons": reasons,
     }

@@ -42,6 +42,7 @@ def build_place_recommendations(place_results):
         {
             "placeId": result["placeId"],
             "name": result["name"],
+            "address": result["address"],
             "reasons": build_place_reason_texts(result["reasons"]),
         }
         for result in place_results[:5]

@@ -39,6 +39,7 @@ async def create_stamp_verification_endpoint(
     roadId: str | None = Form(default=None),
     isRooted: bool = Form(default=False),
     isMockLocation: bool = Form(default=False),
+    devSkipGps: bool = Form(default=False),
     user_id: str = Depends(get_current_uid),
 ):
     try:
@@ -59,6 +60,7 @@ async def create_stamp_verification_endpoint(
             road_id=roadId,
             is_rooted=isRooted,
             is_mock_location=isMockLocation,
+            dev_skip_gps=devSkipGps,
             ip_address=request.client.host if request.client else None,
         )
         attach_badge_grants(

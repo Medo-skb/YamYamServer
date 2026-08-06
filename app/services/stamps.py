@@ -36,12 +36,7 @@ def issue_dev_stamp(
     rating: int = 5,
     one_line_note: str | None = None,
 ) -> dict[str, Any]:
-    if os.getenv("STAMP_DEV_BYPASS_ENABLED", "").strip().lower() not in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }:
+    if not _dev_bypass_enabled():
         raise StampVerificationError(
             code="dev_bypass_disabled",
             message="개발용 스탬프 즉시 발행 기능이 비활성화되어 있습니다.",
@@ -239,6 +234,7 @@ def issue_stamp(
     road_id: str | None,
     is_rooted: bool,
     is_mock_location: bool,
+    dev_skip_gps: bool,
     ip_address: str | None,
 ) -> dict[str, Any]:
     _validate_request(
@@ -253,6 +249,13 @@ def issue_stamp(
         rating=rating,
         one_line_note=one_line_note,
     )
+
+    if dev_skip_gps and not _dev_bypass_enabled():
+        raise StampVerificationError(
+            code="dev_gps_bypass_disabled",
+            message="개발용 GPS 검증 생략 기능이 비활성화되어 있습니다.",
+            status_code=403,
+        )
 
     purchased_at = _parse_client_datetime(ocr_purchased_at)
     if purchased_at is None:
@@ -366,18 +369,23 @@ def issue_stamp(
     elif now - purchased_at > timedelta(hours=receipt_max_age_hours):
         reject_code = "receipt_expired"
         reject_message = "영수증 인증 가능 시간이 지났습니다."
-    elif distance_meters > max_distance_meters:
+    elif not dev_skip_gps and distance_meters > max_distance_meters:
         reject_code = "gps_out_of_range"
         reject_message = "업체에서 너무 멀리 떨어져 있어 인증할 수 없습니다."
 
-    initial_speed_kmh = _calculate_speed_from_last_verification(
-        user_data.get("lastStampVerification"),
-        current_lat=user_lat,
-        current_lng=user_lng,
-        current_time=now,
+    initial_speed_kmh = (
+        None
+        if dev_skip_gps
+        else _calculate_speed_from_last_verification(
+            user_data.get("lastStampVerification"),
+            current_lat=user_lat,
+            current_lng=user_lng,
+            current_time=now,
+        )
     )
     if (
         reject_code is None
+        and not dev_skip_gps
         and initial_speed_kmh is not None
         and initial_speed_kmh > max_speed_kmh
     ):
@@ -416,6 +424,7 @@ def issue_stamp(
         speed_kmh=initial_speed_kmh,
         store_similarity=store_similarity,
     )
+    common_verification_data["isDevGpsBypass"] = dev_skip_gps
 
     if reject_code is not None and reject_message is not None:
         _record_rejected_verification(
@@ -460,14 +469,19 @@ def issue_stamp(
             )
 
         current_user_data = current_user.to_dict() or {}
-        current_speed_kmh = _calculate_speed_from_last_verification(
-            current_user_data.get("lastStampVerification"),
-            current_lat=user_lat,
-            current_lng=user_lng,
-            current_time=now,
+        current_speed_kmh = (
+            None
+            if dev_skip_gps
+            else _calculate_speed_from_last_verification(
+                current_user_data.get("lastStampVerification"),
+                current_lat=user_lat,
+                current_lng=user_lng,
+                current_time=now,
+            )
         )
         if (
-            current_speed_kmh is not None
+            not dev_skip_gps
+            and current_speed_kmh is not None
             and current_speed_kmh > max_speed_kmh
         ):
             rejected_data = {
@@ -541,18 +555,17 @@ def issue_stamp(
                 "stampCount": stamp_count + 1,
             },
         )
-        current_transaction.update(
-            user_ref,
-            {
-                "freePointBalance": next_free_point_balance,
-                "lastStampVerification": {
-                    "lat": user_lat,
-                    "lng": user_lng,
-                    "verifiedAt": now,
-                },
-                "updatedAt": created_at,
-            },
-        )
+        user_updates: dict[str, Any] = {
+            "freePointBalance": next_free_point_balance,
+            "updatedAt": created_at,
+        }
+        if not dev_skip_gps:
+            user_updates["lastStampVerification"] = {
+                "lat": user_lat,
+                "lng": user_lng,
+                "verifiedAt": now,
+            }
+        current_transaction.update(user_ref, user_updates)
 
         if reward_point > 0:
             current_transaction.set(
@@ -578,6 +591,7 @@ def issue_stamp(
             "remainingFreePoint": next_free_point_balance,
             "distanceMeters": round(distance_meters, 1),
             "alreadyProcessed": False,
+            "gpsCheckSkipped": dev_skip_gps,
         }
 
     result = execute_approval(transaction)
@@ -911,6 +925,15 @@ def _dice_coefficient(left: str, right: str) -> float:
             intersection += 1
             left_pairs[pair] = count - 1
     return (2 * intersection) / (len(left) + len(right) - 2)
+
+
+def _dev_bypass_enabled() -> bool:
+    return os.getenv("STAMP_DEV_BYPASS_ENABLED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _positive_float_env(name: str, default: float) -> float:

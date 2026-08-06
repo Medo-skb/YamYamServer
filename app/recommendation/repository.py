@@ -162,6 +162,7 @@ def _snapshot_to_place(snapshot) -> PlaceRecord | None:
     return {
         "placeId": snapshot.id,
         "name": name,
+        "address": str(data.get("address") or "").strip(),
         "regionId": region_id,
         "categoryIds": _as_string_list(data.get("categoryIds")),
         "lat": lat,
