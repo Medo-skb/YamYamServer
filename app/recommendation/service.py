@@ -1,62 +1,17 @@
-from collections import Counter
-
 from app.recommendation.messages import (
     build_course_recommendations,
     build_place_recommendations,
     build_recommendation_message,
 )
+from app.recommendation.profile import build_user_profile
 from app.recommendation.repository import load_recommendation_dataset
-from app.recommendation.utils import distance_meters, is_recent_date, rank_score
-
-# 유사 카테고리는 지금 DB에 없으니까 코드에서 임시 관리
-RELATED_CATEGORY_IDS = {
-    "bakery": ["cafe", "dessert"],
-    "cafe": ["bakery", "dessert"],
-    "dessert": ["bakery", "cafe"],
-}
-
-
-# =========================
-# 사용자 프로필 계산
-# =========================
-
-def build_user_profile(user_id, stamps, places_by_id):
-    user_stamps = [
-        stamp for stamp in stamps
-        if stamp["userId"] == user_id
-    ]
-
-    visited_place_ids = []
-    recent_visited_place_ids = []
-    region_counter = Counter()
-    category_counter = Counter()
-
-    for stamp in user_stamps:
-        place_id = stamp["placeId"]
-        place = places_by_id.get(place_id)
-
-        if place is None:
-            continue
-
-        visited_place_ids.append(place_id)
-        region_counter[place["regionId"]] += 1
-
-        for category_id in place["categoryIds"]:
-            category_counter[category_id] += 1
-
-        if is_recent_date(stamp["issuedAt"]):
-            recent_visited_place_ids.append(place_id)
-
-    return {
-        "visitedPlaceIds": visited_place_ids,
-        "recentVisitedPlaceIds": recent_visited_place_ids,
-        "topRegionIds": [
-            region_id for region_id, _ in region_counter.most_common(3)
-        ],
-        "topCategoryIds": [
-            category_id for category_id, _ in category_counter.most_common(3)
-        ],
-    }
+from app.recommendation.utils import (
+    MAX_CURRENT_LOCATION_DISTANCE_METERS,
+    RELATED_CATEGORY_IDS,
+    calculate_popularity_score,
+    distance_meters,
+    rank_score,
+)
 
 
 # =========================
@@ -85,6 +40,14 @@ def calculate_place_score(place, profile, current_region_id, user_lat, user_lng)
     if region_score > 0:
         score += region_score
         reasons.append(f"자주 방문한 지역 +{region_score}")
+
+    address_prefix = " ".join(place["address"].split()[:2])
+    address_score = rank_score(
+        address_prefix, profile["topAddressPrefixes"], [6, 3, 1]
+    )
+    if address_score > 0:
+        score += address_score
+        reasons.append(f"자주 방문한 구/군 +{address_score}")
 
     # 3. 선호 카테고리 / 유사 카테고리
     category_added = False
@@ -119,6 +82,8 @@ def calculate_place_score(place, profile, current_region_id, user_lat, user_lng)
             place["lat"],
             place["lng"],
         )
+        if distance > MAX_CURRENT_LOCATION_DISTANCE_METERS:
+            return None
 
         if distance <= 300:
             score += 8
@@ -129,34 +94,20 @@ def calculate_place_score(place, profile, current_region_id, user_lat, user_lng)
         elif distance <= 3000:
             score += 2
             reasons.append("3km 이내 +2")
-        elif distance >= 10000:
-            score -= 3
-            reasons.append("10km 이상 -3")
 
     # 5. 방문 이력 감점
     place_id = place["placeId"]
 
     if place_id in profile["recentVisitedPlaceIds"]:
-        score -= 8
-        reasons.append("최근 방문 업체 -8")
+        score -= 12
+        reasons.append("최근 방문 업체 -12")
     elif place_id in profile["visitedPlaceIds"]:
-        score -= 3
-        reasons.append("방문 이력 있음 -3")
+        score -= 6
+        reasons.append("방문 이력 있음 -6")
 
-    popularity_score = 0
-    stamp_count = place.get("stampCount", 0)
-    rating_average = place.get("ratingAverage", 0)
-    if stamp_count >= 100:
-        popularity_score += 3
-    elif stamp_count >= 20:
-        popularity_score += 2
-    elif stamp_count >= 5:
-        popularity_score += 1
-
-    if rating_average >= 4.5:
-        popularity_score += 2
-    elif rating_average >= 4:
-        popularity_score += 1
+    popularity_score = calculate_popularity_score(
+        place.get("stampCount", 0), place.get("ratingAverage", 0)
+    )
 
     if popularity_score > 0:
         score += popularity_score
@@ -250,7 +201,8 @@ def calculate_course_score(course, profile, current_region_id, user_lat, user_ln
             )
 
         if len(distances) > 0:
-            nearest_distance = min(distances)
+            if (nearest_distance := min(distances)) > MAX_CURRENT_LOCATION_DISTANCE_METERS:
+                return None
 
             if nearest_distance <= 1000:
                 score += 5

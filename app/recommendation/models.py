@@ -41,3 +41,11 @@ class RecommendationDataset(TypedDict):
     places: list[PlaceRecord]
     courses: list[CourseRecord]
     stamps: list[StampRecord]
+
+
+class UserProfile(TypedDict):
+    visitedPlaceIds: list[str]
+    recentVisitedPlaceIds: list[str]
+    topRegionIds: list[str]
+    topAddressPrefixes: list[str]
+    topCategoryIds: list[str]

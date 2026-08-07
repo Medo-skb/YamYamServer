@@ -5,6 +5,8 @@ def build_place_reason_texts(reasons):
         reason_texts.append("지금 있는 지역과 가까워요.")
     if any("자주 방문한 지역" in reason for reason in reasons):
         reason_texts.append("평소 자주 가던 지역에 있어요.")
+    if any("자주 방문한 구/군" in reason for reason in reasons):
+        reason_texts.append("평소 자주 가던 동네에 있어요.")
     if any("선호 카테고리" in reason for reason in reasons):
         reason_texts.append("선호하는 메뉴와 잘 맞아요.")
     if any("유사 카테고리" in reason for reason in reasons):
@@ -45,7 +47,7 @@ def build_place_recommendations(place_results):
             "address": result["address"],
             "reasons": build_place_reason_texts(result["reasons"]),
         }
-        for result in place_results[:5]
+        for result in place_results[:3]
     ]
 
 
@@ -89,7 +91,7 @@ def build_course_recommendations(course_results):
             "visitedRatio": result["visitedRatio"],
             "reasons": build_course_reason_texts(result["reasons"]),
         }
-        for result in course_results[:5]
+        for result in course_results[:3]
     ]
 
 

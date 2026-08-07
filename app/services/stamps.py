@@ -1,4 +1,3 @@
-import hashlib
 import math
 import os
 import re
@@ -9,6 +8,7 @@ from uuid import uuid4
 from firebase_admin import firestore, storage
 
 from app.core.firebase import ensure_firebase_app
+from app.services.receipt_identity import ReceiptContent, build_receipt_identity
 
 
 MAX_RECEIPT_BYTES = 10 * 1024 * 1024
@@ -227,6 +227,7 @@ def issue_stamp(
     ocr_store_name: str,
     ocr_purchased_at: str,
     ocr_amount: int | None,
+    ocr_transaction_id: str | None,
     user_lat: float,
     user_lng: float,
     rating: int,
@@ -266,19 +267,29 @@ def issue_stamp(
         )
 
     now = datetime.now(timezone.utc)
-    receipt_hash = hashlib.sha256(receipt_bytes).hexdigest()
+    receipt_identity = build_receipt_identity(
+        receipt_bytes=receipt_bytes,
+        content=ReceiptContent(
+            place_id=place_id,
+            purchased_at=purchased_at,
+            amount=ocr_amount,
+            transaction_id=ocr_transaction_id,
+        ),
+    )
+    receipt_hash = receipt_identity.raw_hash
+    receipt_fingerprint = receipt_identity.fingerprint
 
     ensure_firebase_app()
     database = firestore.client()
     user_ref = database.collection("users").document(user_id)
     place_ref = database.collection("place").document(place_id)
     verification_ref = database.collection("verification").document(
-        receipt_hash
+        receipt_fingerprint
     )
-    stamp_ref = database.collection("stamp").document(receipt_hash)
+    stamp_ref = database.collection("stamp").document(receipt_fingerprint)
     point_transaction_ref = user_ref.collection(
         "users_point_transaction"
-    ).document(f"stamp_{receipt_hash}")
+    ).document(f"stamp_{receipt_fingerprint}")
 
     user_snapshot = user_ref.get()
     place_snapshot = place_ref.get()
@@ -300,7 +311,7 @@ def issue_stamp(
         return _handle_existing_verification(
             existing_verification.to_dict() or {},
             user_id=user_id,
-            receipt_hash=receipt_hash,
+            receipt_id=receipt_fingerprint,
         )
 
     user_data = user_snapshot.to_dict() or {}
@@ -406,9 +417,11 @@ def issue_stamp(
         road_id=road_id,
         receipt_image_url=receipt_image_url,
         receipt_hash=receipt_hash,
+        receipt_fingerprint=receipt_fingerprint,
         ocr_store_name=ocr_store_name,
         purchased_at=purchased_at,
         ocr_amount=ocr_amount,
+        ocr_transaction_id=ocr_transaction_id,
         user_lat=user_lat,
         user_lng=user_lng,
         ip_address=ip_address,
@@ -465,7 +478,7 @@ def issue_stamp(
             return _handle_existing_verification(
                 current_verification.to_dict() or {},
                 user_id=user_id,
-                receipt_hash=receipt_hash,
+                receipt_id=receipt_fingerprint,
             )
 
         current_user_data = current_user.to_dict() or {}
@@ -538,7 +551,7 @@ def issue_stamp(
             {
                 "userId": user_id,
                 "placeId": place_id,
-                "verificationId": receipt_hash,
+                "verificationId": receipt_fingerprint,
                 "roadId": road_id,
                 "oneLineNote": (one_line_note or "").strip(),
                 "rating": rating,
@@ -578,15 +591,15 @@ def issue_stamp(
                     "freePointBalanceAfter": next_free_point_balance,
                     "paidPointBalanceAfter": paid_point_balance,
                     "refType": "stamp",
-                    "refId": receipt_hash,
+                    "refId": receipt_fingerprint,
                     "createdAt": created_at,
                 },
             )
 
         return {
             "approved": True,
-            "verificationId": receipt_hash,
-            "stampId": receipt_hash,
+            "verificationId": receipt_fingerprint,
+            "stampId": receipt_fingerprint,
             "awardedPoints": reward_point,
             "remainingFreePoint": next_free_point_balance,
             "distanceMeters": round(distance_meters, 1),
@@ -678,9 +691,11 @@ def _build_verification_data(
     road_id: str | None,
     receipt_image_url: str,
     receipt_hash: str,
+    receipt_fingerprint: str,
     ocr_store_name: str,
     purchased_at: datetime,
     ocr_amount: int | None,
+    ocr_transaction_id: str | None,
     user_lat: float,
     user_lng: float,
     ip_address: str | None,
@@ -703,6 +718,7 @@ def _build_verification_data(
         "ocrDate": purchased_at_kst.strftime("%Y-%m-%d"),
         "ocrTime": purchased_at_kst.strftime("%H:%M:%S"),
         "ocrAmount": ocr_amount,
+        "ocrTransactionId": ocr_transaction_id,
         "userLat": user_lat,
         "userLng": user_lng,
         "ipAddress": ip_address,
@@ -712,6 +728,7 @@ def _build_verification_data(
         "isMockLocation": is_mock_location,
         "isAbnormalSpeed": is_abnormal_speed,
         "receiptHash": receipt_hash,
+        "receiptFingerprint": receipt_fingerprint,
         "distanceMeters": round(distance_meters, 1),
         "speedKmh": None if speed_kmh is None else round(speed_kmh, 1),
         "storeNameSimilarity": round(store_similarity, 4),
@@ -753,13 +770,13 @@ def _handle_existing_verification(
     data: dict[str, Any],
     *,
     user_id: str,
-    receipt_hash: str,
+    receipt_id: str,
 ) -> dict[str, Any]:
     if data.get("userId") == user_id and data.get("status") == "approved":
         return {
             "approved": True,
-            "verificationId": receipt_hash,
-            "stampId": receipt_hash,
+            "verificationId": receipt_id,
+            "stampId": receipt_id,
             "awardedPoints": _as_non_negative_int(data.get("awardedPoints")),
             "alreadyProcessed": True,
         }

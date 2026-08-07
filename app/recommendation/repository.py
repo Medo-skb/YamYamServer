@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
@@ -19,6 +20,14 @@ from app.recommendation.models import (
 MAX_STAMP_HISTORY: Final = 200
 MAX_PLACE_CANDIDATES: Final = 120
 MAX_CATEGORY_CANDIDATES: Final = 60
+DISTRICT_CANDIDATE_LIMITS: Final = (60, 40, 20)
+
+
+@dataclass(frozen=True, slots=True)
+class _CandidateSelection:
+    region_ids: tuple[str, ...]
+    category_ids: tuple[str, ...]
+    address_prefixes: tuple[str, ...]
 
 
 def load_recommendation_dataset(
@@ -41,28 +50,37 @@ def load_recommendation_dataset(
         for place in visited_places
         for category_id in place["categoryIds"]
     )
+    address_prefix_counter: Counter[str] = Counter()
+    for place in visited_places:
+        address_parts = place["address"].split()
+        if len(address_parts) >= 2:
+            address_prefix_counter[" ".join(address_parts[:2])] += 1
 
     normalized_region_id = (current_region_id or "").strip()
-    candidate_region_ids = list(
-        dict.fromkeys(
-            [
-                *(
-                    [normalized_region_id]
-                    if normalized_region_id and normalized_region_id != "전체"
-                    else []
-                ),
-                *(region_id for region_id, _ in region_counter.most_common(3)),
-            ]
-        )
-    )
+    if normalized_region_id and normalized_region_id != "전체":
+        candidate_region_ids = [normalized_region_id]
+    else:
+        candidate_region_ids = [
+            region_id for region_id, _ in region_counter.most_common(3)
+        ]
     top_category_ids = [
         category_id for category_id, _ in category_counter.most_common(3)
     ]
+    address_prefixes = (
+        ()
+        if normalized_region_id and normalized_region_id != "전체"
+        else tuple(
+            prefix for prefix, _ in address_prefix_counter.most_common(3)
+        )
+    )
 
     candidates = _load_candidate_places(
         database,
-        region_ids=candidate_region_ids,
-        category_ids=top_category_ids,
+        _CandidateSelection(
+            region_ids=tuple(candidate_region_ids),
+            category_ids=tuple(top_category_ids),
+            address_prefixes=address_prefixes,
+        ),
     )
     places_by_id = {
         place["placeId"]: place for place in [*candidates, *visited_places]
@@ -108,25 +126,33 @@ def _load_places_by_ids(database, place_ids: list[str]) -> list[PlaceRecord]:
 
 def _load_candidate_places(
     database,
-    *,
-    region_ids: list[str],
-    category_ids: list[str],
+    selection: _CandidateSelection,
 ) -> list[PlaceRecord]:
     snapshots_by_id = {}
 
-    if region_ids:
+    if selection.address_prefixes:
+        for index, prefix in enumerate(selection.address_prefixes):
+            address_query = (
+                database.collection("place")
+                .where(filter=FieldFilter("address", ">=", prefix))
+                .where(filter=FieldFilter("address", "<", f"{prefix}\uf8ff"))
+            )
+            limit = DISTRICT_CANDIDATE_LIMITS[index]
+            for snapshot in address_query.limit(limit).stream():
+                snapshots_by_id[snapshot.id] = snapshot
+    elif selection.region_ids:
         region_query = database.collection("place").where(
-            filter=FieldFilter("regionId", "in", region_ids[:10])
+            filter=FieldFilter("regionId", "in", list(selection.region_ids[:10]))
         )
         for snapshot in region_query.limit(MAX_PLACE_CANDIDATES).stream():
             snapshots_by_id[snapshot.id] = snapshot
 
-    if category_ids:
+    if selection.category_ids and not selection.address_prefixes:
         category_query = database.collection("place").where(
             filter=FieldFilter(
                 "categoryIds",
                 "array_contains_any",
-                category_ids[:10],
+                list(selection.category_ids[:10]),
             )
         )
         for snapshot in category_query.limit(MAX_CATEGORY_CANDIDATES).stream():
